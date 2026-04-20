@@ -2,6 +2,8 @@ package monitor
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -60,11 +62,29 @@ func (m *Monitor) GetMetrics() Metrics {
 }
 
 func (m *Monitor) Start() {
-	// Start log watcher for DHT/peer/error events
-	m.startLogWatcher()
+	// Only start the follower if we can actually read the unit's journal.
+	// Without permission (not root / not in systemd-journal or adm), `journalctl -f`
+	// hangs forever with no output and no error.
+	if m.canReadJournal() {
+		m.startLogWatcher()
+	} else {
+		m.mu.Lock()
+		m.metrics.LastError = "no journal access — run with sudo"
+		m.mu.Unlock()
+	}
 
 	// Scrape Prometheus metrics immediately + periodically
 	go m.scrapeLoop()
+}
+
+func (m *Monitor) canReadJournal() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "journalctl", "-u", "tonrelay", "-n", "1", "--no-pager", "-o", "json").Output()
+	if err != nil {
+		return false
+	}
+	return len(bytes.TrimSpace(out)) > 0
 }
 
 func (m *Monitor) Stop() {

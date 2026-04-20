@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -71,9 +72,12 @@ func printStatusSnapshot() error {
 	m := mon.GetMetrics()
 	mon.Stop()
 
-	if m.DHTPublished {
+	switch {
+	case m.DHTPublished:
 		fmt.Println("dht:      published")
-	} else {
+	case strings.HasPrefix(m.LastError, "no journal access"):
+		fmt.Println("dht:      unknown (no journal access — run with sudo)")
+	default:
 		fmt.Println("dht:      waiting")
 	}
 
